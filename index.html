@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Microphone Visualizer</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background: #121212;
+      color: white;
+    }
+
+    #controls {
+      margin: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    #controls button, input, select {
+      margin: 10px;
+      padding: 10px;
+      border: none;
+      border-radius: 5px;
+      font-size: 16px;
+    }
+
+    #controls button {
+      background-color: #1e90ff;
+      color: white;
+      cursor: pointer;
+    }
+
+    #controls button:hover {
+      background-color: #0077cc;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 80vh; /* Increased height for better visual coverage */
+      background: black;
+    }
+
+    #colorPickerContainer {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+    }
+  </style>
+</head>
+<body>
+  <h1>Microphone Visualizer</h1>
+  <canvas id="visualizer"></canvas>
+
+  <div id="controls">
+    <button id="startButton">Start Visualization</button>
+    <button id="muteButton" disabled>Mute Input</button>
+    <label>
+      Input Volume: <input type="range" id="inputVolume" min="0" max="1" step="0.01" value="1" disabled>
+    </label>
+    <label>
+      Output Volume: <input type="range" id="outputVolume" min="0" max="1" step="0.01" value="1" disabled>
+    </label>
+    <label>
+      Bar Speed: <input type="range" id="barSpeed" min="0.1" max="2" step="0.1" value="1">
+    </label>
+    <label>
+      Fade Speed: <input type="range" id="fadeSpeed" min="0.01" max="0.1" step="0.01" value="0.05">
+    </label>
+    <label>
+      Color Scheme: 
+      <select id="colorScheme">
+        <option value="hsl">HSL</option>
+        <option value="rgb">RGB</option>
+        <option value="intensity">Intensity-Based</option>
+      </select>
+    </label>
+    <div id="colorPickerContainer">
+      <label>
+        Base Color: <input type="color" id="colorPicker" value="#ff0000">
+      </label>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('visualizer');
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = canvas.offsetHeight;
+
+    const startButton = document.getElementById('startButton');
+    const muteButton = document.getElementById('muteButton');
+    const inputVolumeControl = document.getElementById('inputVolume');
+    const outputVolumeControl = document.getElementById('outputVolume');
+    const barSpeedControl = document.getElementById('barSpeed');
+    const fadeSpeedControl = document.getElementById('fadeSpeed');
+    const colorSchemeControl = document.getElementById('colorScheme');
+    const colorPickerContainer = document.getElementById('colorPickerContainer');
+    const colorPicker = document.getElementById('colorPicker');
+
+    let audioContext;
+    let analyser;
+    let microphone;
+    let gainNode;
+    let muted = false;
+    let barSpeed = 1;
+    let fadeSpeed = 0.05;
+    let baseColor = '#ff0000';
+
+    function initAudio() {
+      navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+        .then(stream => {
+          audioContext = new (window.AudioContext || window.webkitAudioContext)();
+          analyser = audioContext.createAnalyser();
+          gainNode = audioContext.createGain();
+
+          microphone = audioContext.createMediaStreamSource(stream);
+          microphone.connect(gainNode);
+          gainNode.connect(analyser);
+
+          analyser.fftSize = 256;
+          const bufferLength = analyser.frequencyBinCount;
+          const dataArray = new Uint8Array(bufferLength);
+          const fadeArray = new Float32Array(bufferLength).fill(0);
+
+          muteButton.disabled = false;
+          inputVolumeControl.disabled = false;
+          outputVolumeControl.disabled = false;
+
+          function draw() {
+            ctx.fillStyle = `rgba(0, 0, 0, ${fadeSpeed})`;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            analyser.getByteFrequencyData(dataArray);
+            const barWidth = canvas.width / bufferLength;
+            let barHeight;
+            let x = canvas.width / 2; // Start from the middle of the canvas
+
+            for (let i = 0; i < bufferLength; i++) {
+              barHeight = dataArray[i] * barSpeed * 1.5; // Scale up the bar height
+              fadeArray[i] = Math.max(fadeArray[i] * (1 - fadeSpeed), barHeight);
+
+              let color;
+              const intensity = fadeArray[i] / 255; // Normalize intensity (0-1)
+
+              if (colorSchemeControl.value === 'hsl') {
+                const hue = Math.floor(intensity * 360);
+                color = `hsl(${hue}, 100%, 50%)`;
+              } else if (colorSchemeControl.value === 'rgb') {
+                const red = intensity * 255;
+                const green = 50 + intensity * 205;
+                const blue = 255 - intensity * 200;
+                color = `rgb(${red}, ${green}, ${blue})`;
+              } else {
+                const [r, g, b] = baseColor.match(/\w\w/g).map(c => parseInt(c, 16));
+                const red = Math.min(r * intensity, 255);
+                const green = Math.min(g * intensity, 255);
+                const blue = Math.min(b * intensity, 255);
+                color = `rgb(${red}, ${green}, ${blue})`;
+              }
+
+              ctx.fillStyle = color;
+              ctx.fillRect(x, canvas.height / 2 - fadeArray[i] / 2, barWidth, fadeArray[i]);
+
+              // Draw mirrored bars
+              ctx.fillRect(canvas.width / 2 - (x - canvas.width / 2), canvas.height / 2 - fadeArray[i] / 2, barWidth, fadeArray[i]);
+
+              x += barWidth + 1;
+            }
+
+            requestAnimationFrame(draw);
+          }
+
+          draw();
+        })
+        .catch(error => {
+          console.error('Error accessing microphone:', error);
+        });
+    }
+
+    startButton.addEventListener('click', () => {
+      initAudio();
+      startButton.disabled = true;
+    });
+
+    muteButton.addEventListener('click', () => {
+      muted = !muted;
+      gainNode.gain.value = muted ? 0 : inputVolumeControl.value;
+      muteButton.textContent = muted ? 'Unmute Input' : 'Mute Input';
+    });
+
+    inputVolumeControl.addEventListener('input', () => {
+      if (microphone) {
+        gainNode.gain.value = inputVolumeControl.value;
+      }
+    });
+
+    outputVolumeControl.addEventListener('input', () => {
+      analyser.connect(audioContext.destination);
+      if (!muted) {
+        gainNode.gain.value = outputVolumeControl.value;
+      }
+    });
+
+    barSpeedControl.addEventListener('input', () => {
+      barSpeed = parseFloat(barSpeedControl.value);
+    });
+
+    fadeSpeedControl.addEventListener('input', () => {
+      fadeSpeed = parseFloat(fadeSpeedControl.value);
+    });
+
+    colorSchemeControl.addEventListener('change', () => {
+      colorPickerContainer.style.display = colorSchemeControl.value === 'intensity' ? 'flex' : 'none';
+    });
+
+    colorPicker.addEventListener('input', () => {
+      baseColor = colorPicker.value;
+    });
+  </script>
+</body>
+</html>
