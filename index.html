@@ -65,9 +65,6 @@
       Input Volume: <input type="range" id="inputVolume" min="0" max="1" step="0.01" value="1" disabled>
     </label>
     <label>
-      Output Volume: <input type="range" id="outputVolume" min="0" max="1" step="0.01" value="1" disabled>
-    </label>
-    <label>
       Bar Speed: <input type="range" id="barSpeed" min="0.1" max="2" step="0.1" value="1">
     </label>
     <label>
@@ -97,7 +94,6 @@
     const startButton = document.getElementById('startButton');
     const muteButton = document.getElementById('muteButton');
     const inputVolumeControl = document.getElementById('inputVolume');
-    const outputVolumeControl = document.getElementById('outputVolume');
     const barSpeedControl = document.getElementById('barSpeed');
     const fadeSpeedControl = document.getElementById('fadeSpeed');
     const colorSchemeControl = document.getElementById('colorScheme');
@@ -131,7 +127,6 @@
 
           muteButton.disabled = false;
           inputVolumeControl.disabled = false;
-          outputVolumeControl.disabled = false;
 
           function draw() {
             ctx.fillStyle = `rgba(0, 0, 0, ${fadeSpeed})`;
@@ -198,13 +193,6 @@
     inputVolumeControl.addEventListener('input', () => {
       if (microphone) {
         gainNode.gain.value = inputVolumeControl.value;
-      }
-    });
-
-    outputVolumeControl.addEventListener('input', () => {
-      analyser.connect(audioContext.destination);
-      if (!muted) {
-        gainNode.gain.value = outputVolumeControl.value;
       }
     });
 
